@@ -1,0 +1,11 @@
+,Cancer Type Name,Cancer Type Short Name,Sources
+0,Breast invasive carcinoma,brca,"['bcm', 'umich']"
+1,Clear cell renal cell carcinoma,ccrcc,"['bcm', 'umich']"
+2,Colon adenocarcinoma,coad,"['bcm', 'umich']"
+3,Glioblastoma multiforme,gbm,"['bcm', 'umich']"
+4,Head and Neck squamous cell carcinoma,hnscc,"['bcm', 'umich']"
+5,Lung squamous cell carcinoma,lscc,"['bcm', 'umich']"
+6,Lung adenocarcinoma,luad,"['bcm', 'umich']"
+7,Ovarian serous cystadenocarcinoma,ov,"['bcm', 'umich']"
+8,Pancreatic ductal adenocarcinoma,pdac,"['bcm', 'umich']"
+9,Uterine Corpus Endometrial Carcinoma,ucec,"['bcm', 'umich']"
