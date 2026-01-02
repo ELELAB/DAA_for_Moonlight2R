@@ -2,10 +2,10 @@
 
 ## CPTAC data access
 This folder contains the `cptac_data_access.py` script which perform programmatic data access of quantitative proteomic dataset based on user-defined cancer type and pipeline data source.
-Before running the script- look at the `cptac_cancer_info_table.csv` to get insights on the namings of each specific cancer type. In particular, you will need to choose- in the "Cancer Type Abbreviation" column- the name of the cancer type of interest- and in the "Sources" column- one of the sources pipelines that processed the -omics data. Note pipelines are tailored to the -omics data type and mainly "umich" and "bcm" are designed for proteomic data processing
+Before running the script- look at the [cptac_cancer_info_table.csv](cptac_cancer_info_table.csv) to get insights on the namings of each specific cancer type. In particular, you will need to choose- in the "Cancer Type Abbreviation" column- the name of the cancer type of interest- and in the "Sources" column- one of the sources pipelines that processed the -omics data. Note pipelines are tailored to the -omics data type and mainly "umich" and "bcm" are designed for proteomic data processing
 For details on each pipeline please read the supplemental information in https://doi.org/10.1016/j.ccell.2023.06.009.
 
-The `cptac_data_access.py` script will take as input the cancer type name and the source name and it will retrieve the corresponding proteomic abundance table, if available.
+The `cptac_data_access.py` script will take as input the cancer type name and the source name and it will retrieve the corresponding proteomic abundance table, if available. The script will produce two main output as `.csv` files: the protein abundance matrix and a dataframe containing for each sample ID the group/condition label of belonging (e.g. N (Normal), T (Tumor))
 
 ### Reproduce results
 To reproduce the results follow these steps:
