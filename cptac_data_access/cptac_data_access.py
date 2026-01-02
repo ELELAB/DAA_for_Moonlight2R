@@ -15,15 +15,41 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--cancertype",
                     type=str,
                     required=True,
-                    help="Cancer type short name")
+                    help="Cancer type short name.")
 parser.add_argument("-s", "--source",
                     type=str,
                     required=True,
-                    help="Pipeline data source short name")
+                    help="Pipeline data source short name.")
 parser.add_argument("-p", "--plot",
                     action="store_true",
-                    help="if set, data plots will be created")
+                    help="if set, data plots will be created.")
 
+
+def get_sample_group_labels_df(abundance_matrix):
+    """
+    This function creates a dataframe containing for each sample ID the group label it belongs to.
+    This is done following the nomenclature used from cptac.
+
+    Parameters:
+    abundance_matrix (DataFrame) : abundance matrix (rows=proteins; cols=samples)
+
+    Output:
+    out_df (DataFrame): sample ids mapped with group label
+    """
+    df_cols = abundance_matrix.columns
+    
+    sample_groups_list = []
+    for id in df_cols:
+        sample_label_pair = ()
+        if id.endswith(".N"):
+            sample_label_pair = (id, "N")
+        else:
+            sample_label_pair = (id,"T")
+        
+        sample_groups_list.append(sample_label_pair)
+    
+    out_df = pd.DataFrame(sample_groups_list, columns=["Sample_ID", "Label_Group"])
+    return out_df
 
 def plot_distribution_boxplot(abundance_matrix, cancer_name, source, output_dir):
     """
@@ -176,10 +202,15 @@ def main():
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     
-    output_path = os.path.join(output_dir, f'abundance_matrix_{args.cancertype}_{args.source}.csv')
+    output_path_abmat = os.path.join(output_dir, f'abundance_matrix_{args.cancertype}_{args.source}.csv')
     # save abundance matrix
-    proteomic_dataset_transpose_clean.to_csv(output_path)
+    proteomic_dataset_transpose_clean.to_csv(output_path_abmat)
 
+    # create and save sample groups labels dataframe
+    sample_groups_df = get_sample_group_labels_df(proteomic_dataset_transpose_clean)
+    output_path_samplab = os.path.join(output_dir, f'sample_labels_{args.cancertype}_{args.source}.csv')
+    sample_groups_df.to_csv(output_path_samplab)
+    
     if args.plot:
         # plot boxplots
         plot_distribution_boxplot(proteomic_dataset_transpose_clean, args.cancertype, args.source, output_dir )
