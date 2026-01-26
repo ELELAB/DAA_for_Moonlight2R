@@ -14,10 +14,11 @@ git clone https://github.com/ELELAB/DAA_for_Moonlight2R.git
 - create a new environment as follows:
 ```bash 
 module load conda
-conda create --prefix ./DAA_env python=3.11 r-base=4.3
+conda create --prefix ./DAA_env python=3.11 r-base=4.3.3
 ```
 - activate the environment
 ```bash 
+module load conda
 conda activate DAA_env/
 ```
 
