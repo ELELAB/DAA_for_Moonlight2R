@@ -225,7 +225,7 @@ mapProteinIsoforms <- function(abundance_matrix) {
         {
           # aggregate
           abundance_matrix <- abundance_matrix %>% filter(!(Name == gene & !Database_ID %in% ensp_in_df))
-          gene_rows <- abundance_matrix %>% filter(Name == gene) %>% summarise(Name=gene,Database_ID = first(Database_ID), across(where(is.numeric), sum))
+          gene_rows <- abundance_matrix %>% filter(Name == gene) %>% summarise(Name=gene,Database_ID = first(Database_ID), across(where(is.numeric), mean, na.rm = TRUE))
           abundance_matrix <- abundance_matrix %>% filter(Name != gene) %>% bind_rows(gene_rows)     
         }
         else
