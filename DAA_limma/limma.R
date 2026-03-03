@@ -385,6 +385,8 @@ limma_results <- runLimma(limma_input_matrix, sample_labels_df, contrast_labels)
 
 # remove Avg expression, t-statistics and Bonferroni correction columns from the output df 
 limma_results <- limma_results[, !names(limma_results) %in% c("AveExpr","t","B")]
+# assign gene names as rownames
+limma_results <- column_to_rownames(limma_results, var = "Name")
 
 cancer_type <- args$cancer_type
 
@@ -396,10 +398,10 @@ if(!dir.exists("limma_results"))
 
 if(cancer_type != "None")
 {
-  write.csv(limma_results, paste0(results_dir_path,"/limma_table_", cancer_type,".csv"))
+  write.csv(limma_results, paste0(results_dir_path,"/limma_table_", cancer_type,".csv"), row.names = TRUE)
 } else
 {
-  write.csv(limma_results, paste0(results_dir_path,"/limma_table.csv"))
+  write.csv(limma_results, paste0(results_dir_path,"/limma_table.csv"), row.names = TRUE)
 }
   
 if(args$plot)
