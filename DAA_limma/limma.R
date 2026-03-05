@@ -387,6 +387,7 @@ limma_results <- runLimma(limma_input_matrix, sample_labels_df, contrast_labels)
 limma_results <- limma_results[, !names(limma_results) %in% c("AveExpr","t","B")]
 # assign gene names as rownames
 limma_results <- column_to_rownames(limma_results, var = "Name")
+limma_results <- limma_results %>% rename(PValue = P.Value)
 
 cancer_type <- args$cancer_type
 
