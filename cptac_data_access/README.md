@@ -12,7 +12,7 @@ To reproduce the results follow these steps:
 1) Activate environment 
 ```bash 
 module load conda
-conda activate "custom_env_name"
+conda activate ../DAA_py_env/
 ```
 2) Check the  `cptac_cancer_info_table.csv` and choose one of the listed Cancer Type, its corresponding short name and the source pipeline name.
 3) Run the script `cptac_data_access.py` as follows:

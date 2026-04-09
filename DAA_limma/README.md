@@ -20,15 +20,13 @@ Differential Abundance analysis for proteomics data is crucial for accurate dete
 7. The output is a table containing for each protein in the dataset, a log2FC, average expression and p-values. 
 
 ## Reproduce results
+Before proceeding, check if `DAA_py_env` or any other virual environments are still active from the previous steps and deactivate it as follows:
+```bash 
+conda deactivate
+```
 Activate the conda environment 
 ```bash 
-conda activate DAA_env/
-conda config --add channels conda-forge
-conda config --add channels bioconda
-conda install bioconductor-limma
-conda install -c conda-forge r-optparse
-conda install -c conda-forge r-dplyr
-conda install -c conda-forge r-tidyverse
+conda activate ../DAA_r_env/
 ```
 Run the analysis 
 ```bash 
