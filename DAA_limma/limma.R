@@ -353,7 +353,8 @@ option_list <- list(
                 (e.g. if T-N is specified- the fold change for each protein will be the result of Tumor condition - Normal condition). 
                 Please remember to use the same labels definition as in the input provided in --sample_labels"),
   make_option(c("-c", "--cancer_type"), type = "character", default="None", help="A string indicating the cancer type"),
-  make_option(c("-p", "--plot"), action = "store_true", default = FALSE, help="If the flag is specified, plots will be generated")
+  make_option(c("-p", "--plot"), action = "store_true", default = FALSE, help="If the flag is specified, plots will be generated"),
+  make_option(c("-t", "--threshold_pval"), type= "numeric", default = 0.05, help="If the flag is specified, a custom p value threshold will be applied to the volcano plot")
 )
 
 parser <- OptionParser(option_list = option_list)

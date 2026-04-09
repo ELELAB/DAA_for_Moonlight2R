@@ -51,3 +51,7 @@ and the sample label files are both stored in the default folder- created when r
 ```bash 
 Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_coad_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_coad_umich.csv -c coad
 ```
+The script can also produce a Volcano plot for the differentially abundant proteins using an adjusted p-value threshold to visualize the most significant high or low abundance proteins colored in red and blue respectively and not significantly abundant proteins that falls below the p-value threshold in black. To produce the plot you can add the flag option `-p` and customise the adjusted p-value threshold using with the `-t` option as follows:
+```bash 
+Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_coad_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_coad_umich.csv -c coad -p -t 0.01
+```
