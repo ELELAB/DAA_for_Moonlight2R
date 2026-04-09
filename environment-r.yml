@@ -1,0 +1,11 @@
+name: DAA_r_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.3.3
+  - r-tidyverse  
+  - r-httr2
+  - r-optparse
+  - bioconductor-limma
