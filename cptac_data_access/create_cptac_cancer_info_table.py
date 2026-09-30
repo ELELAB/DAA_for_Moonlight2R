@@ -25,7 +25,7 @@ for cancer_type in cancer_options_abbrev:
     cancer_data_sources = list(single_cancer_df.index)
     proteomics_cancer_data_sources = []
     for source in cancer_data_sources:
-        if "proteomics" in single_cancer_df.loc[source][0]:
+        if "proteomics" in single_cancer_df.loc[source].iloc[0]:
             proteomics_cancer_data_sources.append(source)
     out_df.at[i, 'Sources'] = proteomics_cancer_data_sources
     i+=1
