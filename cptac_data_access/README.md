@@ -35,7 +35,7 @@ python cptac_data_access.py -c "cancer type short name" -s "pipeline source shor
 ```
 
 ### Working example
-To download and explore the Colon Adenocarcinoma proteomics dataset processed by the University of Michigan (UMICH) pipeline and get quantitative proteomics data- you can run the following:
+To download and explore the Lung Squamous Cell Carcinoma proteomics dataset processed by the University of Michigan (UMICH) pipeline and get quantitative proteomics data- you can run the following:
 ```python 
 python cptac_data_access.py -c lscc -s umich -p
 ```
