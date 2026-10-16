@@ -12,12 +12,11 @@ Differential Abundance analysis for proteomics data is crucial for accurate dete
 
 ### Limma steps
 1. Load the protein abundance matrix as input, containing proteins as rows and samples as columns.
-2. If the input abundance matrix comes along with a column containing the Ensembl Protein IDs for each protein entry, a filtering step is performed in order to remove duplicate gene names and keep only the canonical isoform associated to a specific Ensembl ID (according to Uniprot annotation) for each gene/protein entry. 
-3. Design matrix creation: it represents the design of the experiment.
-4. Linear Model Fit: limma fits a linear model for each protein to estimate the mean abundance in tumor and normal groups. The method used is the Mean Model for categorical vairables (based on least squares approach). It takes as input a matrix-like data object contaiing log-ratios or log-expression values (i.e. the abundance matrix); a design matrix with rows correspnding to samples and columns to coefficients to be estimated (e.g. 1/0 for tumor/normal). The function fits multiple linear models (one for each protein in the dataset). The model estimates the group means for each protein.
-5. Contrast Matrix: after linear model fit a contrast matrix is used to define the way of mean comparison (e.g. tumorMean-normalMean).
-6. Emprical Bayes Statistics: given a linear model fit, a moderated t-statistics is computed using the empirical bayes moderation of the standard error towards a global value. This method estimates the variance for each protein; a common variance trend across all proteins; shrinks each protein variance estimate toward this common trend. This method improve stability and accuracy of the statistical inference, reducing the impact of noise and instability of individual estimates. This method is useful when the number of features (e.g. proteins) in a dataset is much larger than the number of samples. This steps ensure that the variance of each protein is adjusted to avoid false positives and false negatives. This mainly affect p-values estimates.
-7. The output is a table containing for each protein in the dataset, a log2FC, average expression and p-values. 
+2. Design matrix creation: it represents the design of the experiment.
+3. Linear Model Fit: limma fits a linear model for each protein to estimate the mean abundance in tumor and normal groups. The method used is the Mean Model for categorical vairables (based on least squares approach). It takes as input a matrix-like data object contaiing log-ratios or log-expression values (i.e. the abundance matrix); a design matrix with rows correspnding to samples and columns to coefficients to be estimated (e.g. 1/0 for tumor/normal). The function fits multiple linear models (one for each protein in the dataset). The model estimates the group means for each protein.
+4. Contrast Matrix: after linear model fit a contrast matrix is used to define the way of mean comparison (e.g. tumorMean-normalMean).
+5. Emprical Bayes Statistics: given a linear model fit, a moderated t-statistics is computed using the empirical bayes moderation of the standard error towards a global value. This method estimates the variance for each protein; a common variance trend across all proteins; shrinks each protein variance estimate toward this common trend. This method improve stability and accuracy of the statistical inference, reducing the impact of noise and instability of individual estimates. This method is useful when the number of features (e.g. proteins) in a dataset is much larger than the number of samples. This steps ensure that the variance of each protein is adjusted to avoid false positives and false negatives. This mainly affect p-values estimates.
+6. The output is a table containing for each protein in the dataset, a log2FC, average expression and p-values. 
 
 ## Reproduce results
 Before proceeding, check if `DAA_py_env` or any other virual environments are still active from the previous steps and deactivate it as follows:
@@ -49,9 +48,9 @@ Note that to run the following command you need to specify the actual location o
 and the sample label files are both stored in the default folder- created when running the [cptac_data_access.py](../cptac_data_access/cptac_data_access.py)
 
 ```bash 
-Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_coad_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_coad_umich.csv -c coad
+Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_lscc_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_lscc_umich.csv -c lscc
 ```
 The script can also produce a Volcano plot for the differentially abundant proteins using an adjusted p-value threshold to visualize the most significant high or low abundance proteins colored in red and blue respectively and not significantly abundant proteins that falls below the p-value threshold in black. To produce the plot you can add the flag option `-p` and customise the adjusted p-value threshold using with the `-t` option as follows:
 ```bash 
-Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_coad_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_coad_umich.csv -c coad -p -t 0.01
+Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_lscc_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_lscc_umich.csv -c lscc -p -t 0.01
 ```

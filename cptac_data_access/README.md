@@ -2,10 +2,19 @@
 
 ## CPTAC data access
 This folder contains the `cptac_data_access.py` script which perform programmatic data access of quantitative proteomic dataset based on user-defined cancer type and pipeline data source.
-Before running the script- look at the [cptac_cancer_info_table.csv](cptac_cancer_info_table.csv) to get insights on the namings of each specific cancer type. In particular, you will need to choose- in the "Cancer Type Abbreviation" column- the name of the cancer type of interest- and in the "Sources" column- one of the sources pipelines that processed the -omics data. Note pipelines are tailored to the -omics data type and mainly "umich" and "bcm" are designed for proteomic data processing
+Before running the script- look at the [cptac_cancer_info_table.csv](cptac_cancer_info_table.csv) to get insights on the namings of each specific cancer type. In particular, you will need to choose- in the "Cancer Type Abbreviation" column- the name of the cancer type of interest- and in the "Sources" column- one of the sources pipelines that processed the -omics data. Note pipelines are tailored to the -omics data type and mainly "umich" and "bcm" are designed for proteomic data processing.
 For details on each pipeline please read the supplemental information in https://doi.org/10.1016/j.ccell.2023.06.009.
 
-The `cptac_data_access.py` script will take as input the cancer type name and the source name and it will retrieve the corresponding proteomic abundance table, if available. The script will produce two main output as `.csv` files: the protein abundance matrix and a dataframe containing for each sample ID the group/condition label of belonging (e.g. N (Normal), T (Tumor))
+The `cptac_data_access.py` script will take as input the cancer type name and the source name and it will retrieve the corresponding proteomic abundance table, if available. 
+The script will perfom a mapping to Uniprot to keep only the gene names corresponding to **reviewed** Uniprot entries.
+For each gene in the dataset, the script keeps one single Ensembl Protein ID (ENSP ID), always preferring the ENSP ID linked to the **canonical isoform**. The ENSP ID in the dataset are matched against the Ensembl cross-references of reviewed human Uniprot entries.
+For the genes that have no unique ENSP ID matching the canonical isoform:
+- If one or more ENSP IDs of the gene correspond to the canonical isoform, the ENSP ID row with fewest missing values is kept, and all the others are dropped.
+- If none of the gene's ENSPs corresponds to the canonical isoform, two strategies can be applied:
+1) `conservative` mode: the gene is kept, using the ENSP ID with the fewest missing values (even if linked to an alternative isoform).
+2) `strict` mode: the gene is removed. 
+
+*Note*: ENSP versions (ENSPXXXX.Y, where Y = version) are ignored in the `conservative` mode, but must match exactly in `strict` mode.
 
 ### Reproduce results
 To reproduce the results follow these steps:
@@ -18,7 +27,7 @@ conda activate ../DAA_py_env/
 3) Run the script `cptac_data_access.py` as follows:
 
 ```python 
-python cptac_data_access.py -c "cancer type short name" -s "pipeline source short name" 
+python cptac_data_access.py -c "cancer type short name" -s "pipeline source short name" -i "isoform filtering mode (conservative/strict)"
 ```
 
 ## Visualization support
@@ -37,5 +46,5 @@ python cptac_data_access.py -c "cancer type short name" -s "pipeline source shor
 ### Working example
 To download and explore the Lung Squamous Cell Carcinoma proteomics dataset processed by the University of Michigan (UMICH) pipeline and get quantitative proteomics data- you can run the following:
 ```python 
-python cptac_data_access.py -c lscc -s umich -p
+python cptac_data_access.py -c lscc -s umich -i strict -p
 ```
