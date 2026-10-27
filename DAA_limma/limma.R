@@ -21,9 +21,10 @@ prepareLimmaInput <- function(abundance_matrix) {
   # Manipulate the input abundance matrix to keep
   # the gene name, abundance values only, p-values and 
   #
-  limma_input_matrix <- abundance_matrix[, !names(abundance_matrix) %in% c("Database_ID")]
-  rownames(limma_input_matrix) <- limma_input_matrix[[1]]
-  limma_input_matrix[[1]] <- NULL
+  id_cols <- c("ID", "Name", "Database_ID", "UniProt_ID")
+  limma_input_matrix <- abundance_matrix[, !names(abundance_matrix) %in% id_cols]
+  rownames(limma_input_matrix) <- abundance_matrix$ID
+
   
   return(limma_input_matrix)
 
@@ -57,7 +58,7 @@ runLimma <- function(matrix, groups, contrast_labels) {
   fit3 <- eBayes(fit2, robust = TRUE)
 
   limma_results <- topTable(fit3, coef = 1, adjust.method="BH", number=Inf) %>% 
-                  rownames_to_column("Name") %>% 
+                  rownames_to_column("ID") %>% 
                   as_tibble()
   
   limma_results_joined <- limma_results
@@ -130,10 +131,31 @@ data_matrix <- load_data(data_matrix_path)
 # load sample labels dataframe
 sample_labels_df <- load_data(sample_labels_path)
 
-if(any(duplicated(data_matrix$Name)))
-{
-  stop("The input matrix contains duplicate gene names.")
+# identifier used by limma for each row:
+# the UniProt AC if the input has a UniProt_ID column, otherwise the gene name
+if ("UniProt_ID" %in% names(data_matrix)) {
+  id_col <- "UniProt_ID"
+} else {
+  id_col <- "Name"
+  message("No UniProt_ID column found: gene names are used as identifiers")
 }
+data_matrix$ID <- data_matrix[[id_col]]
+
+# every row must have an identifier, and only once
+missing_id <- is.na(data_matrix$ID) | data_matrix$ID == ""
+if (any(missing_id)) {
+  stop(paste(sum(missing_id), "rows have no", id_col, "- please check the input matrix"))
+}
+
+if (any(duplicated(data_matrix$ID))) {
+  duplicated_ids <- unique(data_matrix$ID[duplicated(data_matrix$ID)])
+  stop(paste("The input matrix contains duplicate", id_col, "values:", paste(duplicated_ids, collapse = ", ")))
+}
+
+# the identifier columns present in the input, added back to the limma results at the end
+annotation_cols <- intersect(c("Name", "Database_ID", "UniProt_ID"), names(data_matrix))
+annotation <- data_matrix[, c("ID", annotation_cols), drop = FALSE]
+
 
 # run limma
 limma_input_matrix <- prepareLimmaInput(data_matrix)
@@ -141,9 +163,13 @@ limma_results <- runLimma(limma_input_matrix, sample_labels_df, contrast_labels)
 
 # remove Avg expression, t-statistics and Bonferroni correction columns from the output df 
 limma_results <- limma_results[, !names(limma_results) %in% c("AveExpr","t","B")]
-# assign gene names as rownames
-limma_results <- column_to_rownames(limma_results, var = "Name")
 limma_results <- limma_results %>% rename(PValue = P.Value)
+
+# add the identifier columns back, as first columns, and remove the helper column ID
+limma_results <- limma_results %>%
+  left_join(annotation, by = "ID") %>%
+  relocate(any_of(c("Name", "Database_ID", "UniProt_ID"))) %>%
+  select(-ID)
 
 cancer_type <- args$cancer_type
 
