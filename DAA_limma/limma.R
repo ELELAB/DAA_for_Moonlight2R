@@ -15,255 +15,16 @@ load_data <- function(data_path) {
   return (original_data)
 }
 
-getUniprotCanonicalIsoform <- function(uniprot_data){
-  
-  #
-  # Retrieve the canonical isoform for a given Uniprot ID
-  #
-  
-  alternative_prods <- list()
-  canonical_isoform <- NA
-  for (x in uniprot_data$comments)
-  {
-    if(x$commentType == "ALTERNATIVE PRODUCTS")
-    {
-      alternative_prods <- append(alternative_prods, x)
-      for (prod in alternative_prods)
-      {
-        if(is.list(prod))
-        {
-          for(iso_idx in seq_along(prod))
-          {
-            if(is.list(prod[[iso_idx]]))
-            {
-              status <- prod[[iso_idx]]$isoformSequenceStatus
-              if(!is.null(status))
-              {
-                if(prod[[iso_idx]]$isoformSequenceStatus == "Displayed")
-                {
-                  canonical_isoform <- prod[[iso_idx]]$isoformIds
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  if (length(canonical_isoform) > 1)
-    return(canonical_isoform[[1]])
-  else
-    return(canonical_isoform)
-}
-
-getEnsemblProtIDs <- function(uniprot_data){
-  
-  #
-  # Retrieve the ensembl IDs for each protein isoform
-  #
-
-  ensembl_refs <- uniprot_data$uniProtKBCrossReferences
-  ensembl_refs <- ensembl_refs[vapply(ensembl_refs, function(x) x$database == "Ensembl", logical(1))]
-  isoform_ids <- character(length(ensembl_refs))
-  ensp_ids    <- character(length(ensembl_refs))
-  for(i in seq_along(ensembl_refs))
-  {
-    prop <- ensembl_refs[[i]]
-    if(is.list(prop))
-    {
-      if(is.null(prop$isoformId))
-      {
-        next
-      }
-      isoform_ids[i] <- prop$isoformId
-      idx <- vapply(prop$properties, function(x) x$key=="ProteinId", logical(1))
-      if(any(idx))
-      {
-        ensp_ids[i] <- prop$properties[[which(idx)[1]]]$value
-      }
-      else
-      {
-        ensp_ids[i] <-  NA_character_
-      }
-    }
-  }
-  isoform_ensp_df <- data.frame(isoformId = isoform_ids, ensp = ensp_ids, stringsAsFactors = FALSE)
-  
-  return (isoform_ensp_df)
-}
-
-mapProteinIsoforms <- function(abundance_matrix) { 
-  
-  # Filter the input dataset to keep only Uniprot 
-  # canonical isoforms It works only when an ensembl 
-  # IDs column is present in the input dataset 
-
-  char_cols <- names(abundance_matrix)[sapply(abundance_matrix, is.character)]
-  if (length(char_cols) == 0)
-    stop("No character columns found")
-  
-  # check if the abundance matrix has a Database ID column
-  has_databaseID_col <- any(grepl("^database[ _]?id$", char_cols, ignore.case = TRUE))
-  if(!has_databaseID_col)
-  {
-    print("No Database ID column found. The analysis will be run without Uniprot Isoform mapping")
-    return (NULL)
-  }
-  map_df <- abundance_matrix[, c(char_cols[[1]], char_cols[[2]])]
-  
-  has_databaseID_col <- any(grepl("^database[ _]?id$", char_cols, ignore.case = TRUE))
-  if(!has_databaseID_col)
-  {
-    print("No Database ID column found")
-    return (NULL)
-  }
-
-  # get duplicate gene names- if any
-  dup_names <- unique(map_df$Name[duplicated(map_df$Name)])
-  # initialize a temporary df to store gene names and db ids (e.g. esembl ids)
-  tmp_df <- data.frame(
-  Name = character(0),
-  Database_ID = character(0),
-  stringsAsFactors = FALSE
-  )
-  # iterate over each gene entry that has duplicates
-  for (gene in dup_names)
-  {
-    # connect to Uniprot API search to retrieve data for the current gene
-    dat <- tryCatch({
-      req <- request("https://rest.uniprot.org/uniprotkb/search") |>
-      req_url_query(
-      query = paste0("gene:", gene, " AND reviewed:true AND organism_id:9606"),
-      format = "json",
-      fields = "accession,gene_primary"
-      )
-      res <- req_perform(req)
-      resp_body_json(res)
-
-    }, 
-    error = function(e) {
-      message("Uniprot query failed for gene", gene, ": ", e$message)
-      NULL
-      }
-    )
-    if(is.null(dat) || length(dat$results) == 0) 
-      next
-
-    # get the uniprot ID for the current gene
-    uniprot_id <- dat$results[[1]]$primaryAccession
-
-    # retrieve uniprot data for the uniprot ID 
-    dat_up <- tryCatch({
-
-      req_up <- request(paste0("https://rest.uniprot.org/uniprotkb/", uniprot_id)) |>
-      req_url_query(format = "json") |>
-      req_perform()
-      resp_body_json(req_up)
-
-    },
-    error = function(e){
-      message("UniProt lookup failed for gene ", gene, " (UniProt ID: ", uniprot_id, "): ", e$message)
-      NULL
-    }
-    )  
-    if (is.null(dat_up)) 
-      next
-    # get uniprot sequence canonical isoform for the current gene
-    up_canonical_isoform <- getUniprotCanonicalIsoform(dat_up)
-
-    if (is.na(up_canonical_isoform)) 
-       up_canonical_isoform <- dat_up$primaryAccession
-    
-    # get the ensembl protein IDs associated to each protein isoform for the current gene
-    df_isoforms_ensp <- getEnsemblProtIDs(dat_up)
-
-    if(any(df_isoforms_ensp$ensp == ""))
-    {
-      df_isoforms_ensp <- do.call(rbind, lapply(dat_up$uniProtKBCrossReferences, function(x) {
-        if (x$database == "Ensembl" && !is.null(x$properties$proteinId)) {
-          data.frame(
-            isoformId = up_canonical_isoform,
-            ensp = x$properties$proteinId,
-            stringsAsFactors = FALSE
-          )
-        } else {
-          NULL
-        }
-      }))
-    }
-    if(is.null(df_isoforms_ensp))
-    {
-      abundance_matrix <- abundance_matrix[abundance_matrix$Name != gene,]
-      next
-    }
-    # get the ensp related to the canonical isoform only (could be more than one)
-    canonical_ensp_id <- df_isoforms_ensp[df_isoforms_ensp$isoformId == up_canonical_isoform,]$ensp
-    # if no ensp is associated to the uniprot canonical isoform, remove the gene from the input dataset
-    if(is.null(canonical_ensp_id) || length(canonical_ensp_id) == 0)
-    {
-      abundance_matrix <- abundance_matrix[abundance_matrix$Name != gene,]
-      next
-    }
-    # get the ensp ids present in the input dataframe for the current gene
-    ensp_ids_map_df <- abundance_matrix$Database_ID[abundance_matrix$Name == gene]
-    # filter the input dataframe to only keep the ensp ids associated to the canonical isoform
-    if(length(canonical_ensp_id) > 1)
-    {
-      # --- if no esps associated to the canonical isoform is present in the input df- remove all the gene rows.
-      if(!any(canonical_ensp_id %in% ensp_ids_map_df))
-      {
-        # if no ensp ids is found in the input df- this means that no canonical isoform is present for that gene and we should remove the gene entry
-        abundance_matrix <- abundance_matrix[abundance_matrix$Name != gene,]
-        next
-      }
-      else
-      {
-        # get only the ensp associated to the canonical isoform that are present in the input df 
-        ensp_in_df <- canonical_ensp_id[canonical_ensp_id %in% map_df$Database_ID]
-        # if still more than one ensp is associated to canonical isoform and present in the input df- aggregate data
-        if(length(ensp_in_df) > 1)
-        {
-          # aggregate
-          abundance_matrix <- abundance_matrix %>% filter(!(Name == gene & !Database_ID %in% ensp_in_df))
-          gene_rows <- abundance_matrix %>% filter(Name == gene) %>% summarise(Name=gene,Database_ID = first(Database_ID), across(where(is.numeric), mean, na.rm = TRUE))
-          abundance_matrix <- abundance_matrix %>% filter(Name != gene) %>% bind_rows(gene_rows)     
-        }
-        else
-        {
-          if(!is.na(ensp_in_df))
-            abundance_matrix <- abundance_matrix[!(abundance_matrix$Name == gene & abundance_matrix$Database_ID != ensp_in_df),]
-        }
-      }
-    }
-    # if only one ensp is associated to the canonical isoform
-    # keep only the row associated with it in the input df
-    else if (length(canonical_ensp_id) == 1)
-    {
-      if(!is.na(canonical_ensp_id))
-      {
-        if(!canonical_ensp_id %in% abundance_matrix[abundance_matrix$Name == gene,]$Database_ID)
-        {
-          abundance_matrix <- abundance_matrix[abundance_matrix$Name != gene,]
-          next        
-        }
-        else
-          abundance_matrix <- abundance_matrix[!(abundance_matrix$Name == gene & abundance_matrix$Database_ID != canonical_ensp_id),]
-      }
-    }
-  }
-
-  return(abundance_matrix)
-}
-
 prepareLimmaInput <- function(abundance_matrix) {
   
   #
   # Manipulate the input abundance matrix to keep
   # the gene name, abundance values only, p-values and 
   #
-  limma_input_matrix <- abundance_matrix[, !names(abundance_matrix) %in% c("Database_ID")]
-  rownames(limma_input_matrix) <- limma_input_matrix[[1]]
-  limma_input_matrix[[1]] <- NULL
+  id_cols <- c("ID", "Name", "Database_ID", "UniProt_ID")
+  limma_input_matrix <- abundance_matrix[, !names(abundance_matrix) %in% id_cols]
+  rownames(limma_input_matrix) <- abundance_matrix$ID
+
   
   return(limma_input_matrix)
 
@@ -297,10 +58,10 @@ runLimma <- function(matrix, groups, contrast_labels) {
   fit3 <- eBayes(fit2, robust = TRUE)
 
   limma_results <- topTable(fit3, coef = 1, adjust.method="BH", number=Inf) %>% 
-                  rownames_to_column("Name") %>% 
+                  rownames_to_column("ID") %>% 
                   as_tibble()
   
-  limma_results_joined <- limma_results #protein_map_df %>% left_join(limma_results, by = "Database_ID")
+  limma_results_joined <- limma_results
 
   limma_results_joined$Direction <- ifelse(limma_results_joined$logFC > 0, "up", "down") %>% as.factor()
 
@@ -370,25 +131,45 @@ data_matrix <- load_data(data_matrix_path)
 # load sample labels dataframe
 sample_labels_df <- load_data(sample_labels_path)
 
-filtered_data_matrix <- mapProteinIsoforms(data_matrix)
-if(is.null(filtered_data_matrix))
-{
-  filtered_data_matrix <- data_matrix
+# identifier used by limma for each row:
+# the UniProt AC if the input has a UniProt_ID column, otherwise the gene name
+if ("UniProt_ID" %in% names(data_matrix)) {
+  id_col <- "UniProt_ID"
+} else {
+  id_col <- "Name"
+  message("No UniProt_ID column found: gene names are used as identifiers")
 }
-if(any(duplicated(filtered_data_matrix$Name)))
-{
-  stop("The input matrix contains duplicate gene names.")
+data_matrix$ID <- data_matrix[[id_col]]
+
+# every row must have an identifier, and only once
+missing_id <- is.na(data_matrix$ID) | data_matrix$ID == ""
+if (any(missing_id)) {
+  stop(paste(sum(missing_id), "rows have no", id_col, "- please check the input matrix"))
 }
 
+if (any(duplicated(data_matrix$ID))) {
+  duplicated_ids <- unique(data_matrix$ID[duplicated(data_matrix$ID)])
+  stop(paste("The input matrix contains duplicate", id_col, "values:", paste(duplicated_ids, collapse = ", ")))
+}
+
+# the identifier columns present in the input, added back to the limma results at the end
+annotation_cols <- intersect(c("Name", "Database_ID", "UniProt_ID"), names(data_matrix))
+annotation <- data_matrix[, c("ID", annotation_cols), drop = FALSE]
+
+
 # run limma
-limma_input_matrix <- prepareLimmaInput(filtered_data_matrix)
+limma_input_matrix <- prepareLimmaInput(data_matrix)
 limma_results <- runLimma(limma_input_matrix, sample_labels_df, contrast_labels)
 
 # remove Avg expression, t-statistics and Bonferroni correction columns from the output df 
 limma_results <- limma_results[, !names(limma_results) %in% c("AveExpr","t","B")]
-# assign gene names as rownames
-limma_results <- column_to_rownames(limma_results, var = "Name")
 limma_results <- limma_results %>% rename(PValue = P.Value)
+
+# add the identifier columns back, as first columns, and remove the helper column ID
+limma_results <- limma_results %>%
+  left_join(annotation, by = "ID") %>%
+  relocate(any_of(c("Name", "Database_ID", "UniProt_ID"))) %>%
+  select(-ID)
 
 cancer_type <- args$cancer_type
 
