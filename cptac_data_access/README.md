@@ -49,8 +49,15 @@ For each gene in the input dataset, the ENSP ID linked to it are assessed based 
 
 *Note*: ENSP versions (ENSPXXXX.Y, where Y = version) are ignored by default. If option `-e` is used, the full ENSP ID must match in UniProt to be considered valid.
 
-
-### Reproduce results
+## Missing value data handling 
+The script applies a filter on proteins with missing values across samples. Specifically, it drops all the rows where the proteins have missing value in more than 50% of the samples by default. The user can customize this fraction threshold by using the flag option `-m`. 
+The script prints the overall missingness percentage before and after this first filer. If the percentage of missing values is low (<15%) it is suggested to not impute missing value at all (https://doi.org/10.1002/pmic.202200092). For the DAA step of the pipeline, `limma` can handle missing values by only considering samples where the protein is actually measured.
+If an imputation of missing value is required, the user can choose to run `kNN` missing value imputation by using the flag option `-u`. The user can also customise the `k` by using the `-k` option. By defualt the script uses a `k=4` as used in this benchmarking study doi:10.1021/acs.jproteome.3c00205. 
+The script check whether proteins missing in more than 50% (default) of samples in at least one group condition, are concentrated in only one group condition: if a protein is missing completely in one group, it will be dropped. 
+Note1: a warning will be printed for prtoeins that have missing values in more than 50% (default) of the samples of at least one group, and a list of these proteins will be printed as well. 
+Note2: a warning will be printed to notify whether for a protein missgness is concetrated in one group condition only.
+Note3: the script output an additional `.csv` reporting the missigness summary for each protein of the dataset. 
+## Reproduce results
 To reproduce the results follow these steps:
 1) Activate environment 
 ```bash 
@@ -78,10 +85,14 @@ The `cptac_data_access.py` script also performs Principal Component Analysis (PC
 - Density plot of the proteins abundance values of each samples across the entire dataset (protein_abundance_density_plots.png)
 - PCA plot where each sample is clustered on the group of belonging (e.g. Tumor, Normal) 
 
-### Working example
+## Working example
 To download and explore the Lung Squamous Cell Carcinoma  (LSCC) proteomics dataset processed by the University of Michigan (UMICH) pipeline and get quantitative proteomics data, you can run the following command:
 ```bash 
 python cptac_data_access.py -c lscc -s umich -i conservative -p
+```
+To run the same script with missing value data imputation, run the follwing:
+```bash 
+python cptac_data_access.py -c lscc -s umich -i conservative -p -u knn
 ```
 The output is stored in a folder named `cptac_dataset_results` containing:
 - downloaded cptac abundance matrix (`.csv`)
