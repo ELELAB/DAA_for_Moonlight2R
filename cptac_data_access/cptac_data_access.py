@@ -37,7 +37,12 @@ parser.add_argument("-e", "--version-id",
 parser.add_argument("-m", "--missing-threshold",
                     type=float,
                     default=0.5,
-                    help="Missing value threshold expresse in fractions. Rows with missing values in more than this fraction of samples will be dropped. Default is 0.5, meaning rows with missing values in more than 50 per cent of the samples will dropped.")
+                    help="Missing value threshold expressed in fractions. Rows with missing values in more than this fraction of samples will be dropped. Default is 0.5, meaning rows with missing values in more than 50 per cent of the samples will be dropped.")
+parser.add_argument("-n", "--min-obs-per-group",
+                    type=int,
+                    default=3,
+                    help="Minimum number of observed values required in each group (tumour and normal). "
+                         "Proteins with fewer are removed. Default is 3")
 parser.add_argument("-u", "--imputation-method",
                     type=str,
                     choices=["none", "knn"],
@@ -45,7 +50,7 @@ parser.add_argument("-u", "--imputation-method",
                     help="Missing value handling strategy: none is default")
 parser.add_argument("-k", "--knn-neighbors",
                     type=int,
-                    default=8,
+                    default=4,
                     help="Number of neighbours for kNN imputation"
                          "Used only with -u knn.")
 
@@ -756,7 +761,7 @@ def drop_missing_values(abundance_matrix, na_frac_th):
     return na_dropped_matrix
 
     
-def check_missing_values_per_group(abundance_matrix, na_frac_th):
+def check_missing_values_per_group(abundance_matrix, na_frac_th, min_obs_per_group):
     """
     Check whether any protein has missing values in more than na_frac_th
     of the samples of the tumour group or of the normal group.
@@ -764,17 +769,18 @@ def check_missing_values_per_group(abundance_matrix, na_frac_th):
     
     Parameters: 
     abundance_matrix (DataFrame): (rows=proteins; cols=samples)
-    na_frac_th (float) : missing value fraction threshold within a group    
-    
+    na_frac_th (float) : missing value fraction threshold within a group  
+    min_obs_per_group (int): minimum number of samples per group with valid values required for group comparison
+
     Returns (bool Series):
     missing_exceed (bool Series):  True for proteins above the threshold.
-    all_missing (bool Series): True for proteins missing in all samples of one group
+    (bool Series): True for proteins with fewer than min_obs_per_group values in at least one sample group
     """
     labels_df = get_sample_group_labels_df(abundance_matrix)
     missing_exceed = pd.Series(False, index=abundance_matrix.index)
     
-    
-    all_missing = pd.Series(False, index=abundance_matrix.index)
+    # collection to store those proteins that have valid values less than 3 samples per groups (also including the cases where protein is missing at all in one group)
+    obs_under_threshold = pd.Series(False, index=abundance_matrix.index)
     frac_na_by_group = {}
     for group in ["T", "N"]:
         cols = labels_df.loc[labels_df["Label_Group"] == group, "Sample_ID"].tolist()
@@ -783,9 +789,12 @@ def check_missing_values_per_group(abundance_matrix, na_frac_th):
         frac_na = abundance_matrix[cols].isna().mean(axis=1)
         frac_na_by_group[group] = frac_na
         missing_exceed |= frac_na > na_frac_th
-        all_missing |= frac_na == 1
-    
-    missing_exceed &= ~all_missing
+        n_obs = abundance_matrix[cols].notna().sum(axis=1)
+        obs_under_threshold |= n_obs < min_obs_per_group
+
+    missing_exceed &= ~obs_under_threshold
+    print(f"Proteins with < {min_obs_per_group} observed values in a group: {obs_under_threshold.sum()}") 
+
     if missing_exceed.any():
         names = abundance_matrix.index[missing_exceed].get_level_values(0)
         print(f"WARNING: {missing_exceed.sum()} proteins have missing values in more than "
@@ -797,15 +806,14 @@ def check_missing_values_per_group(abundance_matrix, na_frac_th):
         print(f"Largest difference in missing fraction between tumours and normals "
               f"for these proteins: {difference.max():.1%}")
 
-    if all_missing.any():
+    if obs_under_threshold.any():
         names = abundance_matrix.index[all_missing].get_level_values(0)[:10]
-        print(f"{all_missing.sum()} proteins removed: no values at all in one group "
-              f"(the tumour-vs-normal difference cannot be estimated). "
+        print(f"{obs_under_threshold.sum()} proteins removed: fewer than {min_obs_per_group} in at least one group"
               f"Examples: {', '.join(map(str, names))}")
     
-    return missing_exceed, all_missing
+    return missing_exceed, obs_under_threshold
 
-def impute_knn(filtered_abundance_matrix, k = 4):
+def impute_knn(filtered_abundance_matrix, k):
     """
     This function performs missing value data imputation
     using the kNN algorithm. Each missing value is estimated from the k most
@@ -835,7 +843,8 @@ def main():
         parser.error("--missing-threshold must be between 0 (excluded) and 1")
     if args.knn_neighbors < 1:
         parser.error("--knn-neighbors must be at least 1")
-    
+    if args.min_obs_per_group < 1:
+        parser.error("--min-obs-per-group must be at least 1")
     try:
         all_cancer_types = cptac.get_cancer_options()
     except Exception as e:
@@ -884,8 +893,10 @@ def main():
         # Missing values handling
         # by default remove all the rows that have missing values in more than 50 % of samples
         na_dropped_matrix = drop_missing_values(matrix_canonical_isoform, args.missing_threshold)
-        missing_exceed, all_missing = check_missing_values_per_group(na_dropped_matrix, args.missing_threshold)
-        na_dropped_matrix = na_dropped_matrix[~all_missing]
+        # store the number of kept proteins that passed the first filter
+        n_after_overall_filter = len(na_dropped_matrix)
+        missing_exceed, obs_under_threshold = check_missing_values_per_group(na_dropped_matrix, args.missing_threshold, args.min_obs_per_group)
+        na_dropped_matrix = na_dropped_matrix[~obs_under_threshold]
 
         if args.imputation_method == "knn":
             imputed_matrix, missing_value_table = impute_knn(na_dropped_matrix, args.knn_neighbors)
@@ -898,9 +909,10 @@ def main():
         n_rows_after = len(imputed_matrix)
         n_genes_before = matrix_canonical_isoform.index.get_level_values(0).nunique()
         n_genes_after = imputed_matrix.index.get_level_values(0).nunique()
-        print(f"Missing values filter: {n_rows_before - n_rows_after} rows "
-              f"({n_genes_before - n_genes_after} genes) removed: missing in more than "
-              f"{args.missing_threshold:.0%} of samples, or missing in all samples of one group")
+        print(f"Missing values filter:")
+        print(f"- {n_rows_before - n_after_overall_filter} proteins removed: missing in more than {args.missing_threshold:.0%} of all samples")
+        print(f"  - {n_after_overall_filter - n_rows_after} proteins removed: fewer than "
+              f"{args.min_obs_per_group} observed values in the tumour or normal group")
         print(f"Final matrix: {n_rows_after} rows ({n_genes_after} genes)")
         
     except Exception as e:
