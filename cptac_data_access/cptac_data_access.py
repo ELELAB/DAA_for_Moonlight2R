@@ -8,6 +8,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt 
 import time  
 import requests
+import numpy as np
+from sklearn.impute import KNNImputer
 
 parser = argparse.ArgumentParser()
 
@@ -32,7 +34,25 @@ parser.add_argument("-i", "--isoform-mode",
 parser.add_argument("-e", "--version-id",
                     action="store_true",
                     help="If set, the full version of the Database ID (ENSEMBL Protein ID) will be parsed for the isoform mapping")
-
+parser.add_argument("-m", "--missing-threshold",
+                    type=float,
+                    default=0.5,
+                    help="Missing value threshold expressed in fractions. Rows with missing values in more than this fraction of samples will be dropped. Default is 0.5, meaning rows with missing values in more than 50 per cent of the samples will be dropped.")
+parser.add_argument("-n", "--min-obs-per-group",
+                    type=int,
+                    default=3,
+                    help="Minimum number of observed values required in each group (tumour and normal). "
+                         "Proteins with fewer are removed. Default is 3")
+parser.add_argument("-u", "--imputation-method",
+                    type=str,
+                    choices=["none", "knn"],
+                    default="none",
+                    help="Missing value handling strategy: none is default")
+parser.add_argument("-k", "--knn-neighbors",
+                    type=int,
+                    default=4,
+                    help="Number of neighbours for kNN imputation"
+                         "Used only with -u knn.")
 
 UNIPROT_SEARCH_URL = "https://rest.uniprot.org/uniprotkb/search"
 GENE_NAME_ALIASES = ["name", "gene name", "gene names", "gene symbol", "symbol", "gene"]
@@ -600,7 +620,7 @@ def map_uniprot_isoforms(abundance_matrix, mode="conservative", use_version=Fals
 
     return out
  
-def plot_distribution_boxplot(abundance_matrix, cancer_name, source, output_dir):
+def plot_distribution_boxplot(abundance_matrix, cancer_name, source, imputation, output_dir):
     """
     This function creates a multi-boxplot chart of protein abundance 
     for each sample in the dataset and save it as .png figure 
@@ -619,12 +639,12 @@ def plot_distribution_boxplot(abundance_matrix, cancer_name, source, output_dir)
     plt.title("Boxplots of Protein Abundance per Sample")
     plt.tight_layout()
 
-    output_path = os.path.join(output_dir, f'protein_abundance_boxplots_{cancer_name}_{source}.png')
+    output_path = os.path.join(output_dir, f'protein_abundance_boxplots_{cancer_name}_{source}_{imputation}.png')
 
     plt.savefig(output_path, dpi=300)
     plt.figure(figsize=(12, 6))
 
-def plot_distribution_density(abundance_matrix, cancer_name, source, output_dir):
+def plot_distribution_density(abundance_matrix, cancer_name, source, imputation, output_dir):
     """
     This function creates a distribtuon density plot of protein abundance 
     for each sample in the dataset and save it as .png figure 
@@ -646,12 +666,12 @@ def plot_distribution_density(abundance_matrix, cancer_name, source, output_dir)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left',ncol=4, borderaxespad=0.,fontsize=5)
     plt.tight_layout()
 
-    output_path = os.path.join(output_dir, f'protein_abundance_density_plots_{cancer_name}_{source}.png')
+    output_path = os.path.join(output_dir, f'protein_abundance_density_plots_{cancer_name}_{source}_{imputation}.png')
 
     plt.savefig(output_path, dpi=300)
     plt.figure(figsize=(12, 6))
 
-def plot_pca(abundance_matrix, cancer_name, source, output_dir):
+def plot_pca(abundance_matrix, cancer_name, source, imputation, output_dir):
     """
     This function perform Principal Component Analysis (PCA) 
     on the protein abundance dataset and a PCA plot saved as .png 
@@ -661,9 +681,9 @@ def plot_pca(abundance_matrix, cancer_name, source, output_dir):
     cancer_name (str) : cancer type short name
     
     """ 
-    # remove unused indexes of the df
-    df = abundance_matrix.reset_index(drop=True)
-
+    # remove unused indexes of the df and drop missing values row if any
+    df = abundance_matrix.dropna().reset_index(drop=True)
+    print(f"PCA on {df.shape[0]} of {abundance_matrix.shape[0]} proteins (proteins with missing values excluded)")
     # create a dataframe that includes for each sample ID the condition label (Tumor/Normal)
     sample_ids = df.columns.tolist()
     label_dict = {}
@@ -689,19 +709,140 @@ def plot_pca(abundance_matrix, cancer_name, source, output_dir):
     # plot PCA 
     plt.figure(figsize=(8,6))
     sns.scatterplot(data=pca_df, x='PC1', y='PC2', hue='group', palette='Set1') 
-    plt.title('PCA of Protein Abudance')
+    plt.title(f'PCA of Protein Abundance ({df.shape[0]} proteins)')
     plt.xlabel(f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)')
     plt.ylabel(f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)')
     plt.grid(True)
     
-    output_path = os.path.join(output_dir, f'pca_{cancer_name}_{source}.png')
+    output_path = os.path.join(output_dir, f'pca_{cancer_name}_{source}_{imputation}.png')
 
     plt.savefig(output_path, dpi=300)
+
+def drop_missing_values(abundance_matrix, na_frac_th):
+    '''
+    This function performs a pre-filtering of missing values
+    by removing proteins that present missing values over more than 50% of samples
+    by default. 
+    The user can choose which threshold to apply for this filtering.
+
+    Parameters:
+    abundance_matrix (DataFrame) : abundance matrix (rows=proteins; cols=samples)
+    na_frac_th (float) : missing value fraction across samples threshold
+
+    Output:
+    A DataFrame: NA-filtered abundance matrix (rows=proteins; cols=samples)
+    '''
+    # computes the number of NA for each protein
+    na_per_protein = abundance_matrix.isna().sum(axis=1)  
+    # number of protein with missing values
+    n_protein_with_na = (na_per_protein > 0).sum() 
+    print(f"Proteins with >= 1 missing value: {n_protein_with_na}")
+    # isna() makes a table with True where a value is missing, False otherwise. Since True = 1, the  average is the fraction of missing values for that protein (e.g. protein missing in 20 of 200 samples gets 20/200= 0.1)
+    frac_na = abundance_matrix.isna().mean(axis=1) 
+    # count and report how many proteins have 0 missing values 
+    print(f"Completely observed: {(frac_na == 0).sum()}") 
+    # report the overall percentage of missingness before filtering 
+    print(f"Overall missingness: {abundance_matrix.isna().values.mean():.1%}")
+    # count and report how many proteins have missing values in between 0 and custom threshold fraction of samples
+    print(f"Missing in 0-{na_frac_th:.0%}:    {((frac_na > 0) & (frac_na <= na_frac_th)).sum()}") 
+    # count and report how many proteins have missing values in more than custom threshold fraction of samples
+    print(f"Missing in >{na_frac_th:.0%} :     {(frac_na > na_frac_th).sum()} => removed by the filter") # counts how many proteins have missing values in more than 50% of samples
+  
+    print(f"Dropping rows (proteins) which hold missing values in more than {na_frac_th:.0%} of samples")
+    # drops rows with missing values in more than custom trheshold fraction of samples 
+    na_dropped_matrix = abundance_matrix[frac_na <=na_frac_th]
+
+    # report a summary of the pre-filtering step
+    print(f"Number of proteins before NA-dropping: {abundance_matrix.shape[0]} proteins")
+    print(f"Number of proteins after NA-dropping using {na_frac_th:.0%} threshold: {na_dropped_matrix.shape[0]} proteins")
+    print(f"Removed: {abundance_matrix.shape[0] - na_dropped_matrix.shape[0]}")
+    print(f"Overall missingness after filter: {na_dropped_matrix.isna().values.mean():.1%}")
+    
+    return na_dropped_matrix
+
+    
+def check_missing_values_per_group(abundance_matrix, na_frac_th, min_obs_per_group):
+    """
+    Check whether any protein has missing values in more than na_frac_th
+    of the samples of the tumour group or of the normal group.
+    Prints a warning. 
+    
+    Parameters: 
+    abundance_matrix (DataFrame): (rows=proteins; cols=samples)
+    na_frac_th (float) : missing value fraction threshold within a group  
+    min_obs_per_group (int): minimum number of samples per group with valid values required for group comparison
+
+    Returns (bool Series):
+    missing_exceed (bool Series):  True for proteins above the threshold.
+    (bool Series): True for proteins with fewer than min_obs_per_group values in at least one sample group
+    """
+    labels_df = get_sample_group_labels_df(abundance_matrix)
+    missing_exceed = pd.Series(False, index=abundance_matrix.index)
+    
+    # collection to store those proteins that have valid values less than 3 samples per groups (also including the cases where protein is missing at all in one group)
+    obs_under_threshold = pd.Series(False, index=abundance_matrix.index)
+    frac_na_by_group = {}
+    for group in ["T", "N"]:
+        cols = labels_df.loc[labels_df["Label_Group"] == group, "Sample_ID"].tolist()
+        if not cols:
+            continue   # groups are not present in this dataset
+        frac_na = abundance_matrix[cols].isna().mean(axis=1)
+        frac_na_by_group[group] = frac_na
+        missing_exceed |= frac_na > na_frac_th
+        n_obs = abundance_matrix[cols].notna().sum(axis=1)
+        obs_under_threshold |= n_obs < min_obs_per_group
+
+    missing_exceed &= ~obs_under_threshold
+    print(f"Proteins with < {min_obs_per_group} observed values in a group: {obs_under_threshold.sum()}") 
+
+    if missing_exceed.any():
+        names = abundance_matrix.index[missing_exceed].get_level_values(0)
+        print(f"WARNING: {missing_exceed.sum()} proteins have missing values in more than "
+              f"{na_frac_th:.0%} of the samples of at least one group")
+        print(", ".join(map(str, names)))
+    
+    if missing_exceed.any() and {"T", "N"} <= frac_na_by_group.keys():
+        difference = (frac_na_by_group["T"] - frac_na_by_group["N"]).abs()[missing_exceed]
+        print(f"Largest difference in missing fraction between tumours and normals "
+              f"for these proteins: {difference.max():.1%}")
+
+    if obs_under_threshold.any():
+        names = abundance_matrix.index[obs_under_threshold].get_level_values(0)[:10]
+        print(f"{obs_under_threshold.sum()} proteins removed: fewer than {min_obs_per_group} in at least one group"
+              f"Examples: {', '.join(map(str, names))}")
+    
+    return missing_exceed, obs_under_threshold
+
+def impute_knn(filtered_abundance_matrix, k):
+    """
+    This function performs missing value data imputation
+    using the kNN algorithm. Each missing value is estimated from the k most
+    similar proteins in the same sample.
+    This strategy models missing values by assuming that 
+    missing values look like the observed ones (MAR). 
+    """
+    # ---- perform missing value imputation ---
+    # save where the missing values are
+    missing_value_table = filtered_abundance_matrix.isna()
+    print(f"Values to impute: {missing_value_table.values.sum()}")
+    knn = KNNImputer(n_neighbors=k)
+    df_knn = pd.DataFrame(knn.fit_transform(filtered_abundance_matrix),
+                      index=filtered_abundance_matrix.index, columns=filtered_abundance_matrix.columns)
+    print(f"NaN remaining: {df_knn.isna().values.sum()}")
+    print(f"Observed values unchanged: {np.allclose(df_knn[~missing_value_table], filtered_abundance_matrix[~missing_value_table], equal_nan=True)}")
+
+    return df_knn, missing_value_table
 
 def main():
 
     args = parser.parse_args()
-
+    
+    if not 0 < args.missing_threshold <= 1:
+        parser.error("--missing-threshold must be between 0 (excluded) and 1")
+    if args.knn_neighbors < 1:
+        parser.error("--knn-neighbors must be at least 1")
+    if args.min_obs_per_group < 1:
+        parser.error("--min-obs-per-group must be at least 1")
     try:
         all_cancer_types = cptac.get_cancer_options()
     except Exception as e:
@@ -732,55 +873,68 @@ def main():
     except Exception as e:
         print(f'Error downloading data for {args.cancertype}: {e}')
         sys.exit(1)
-
    
     if proteomic_cancer_type_cptac.empty:
         print("Downloaded proteomic dataset is empty")
         sys.exit(1)
-     # transpose the abundance table to get proteins as rows and samples as columns
+
+    output_dir = 'cptac_dataset_results'
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir) 
+    # transpose the abundance table to get proteins as rows and samples as columns
     try:
         proteomic_dataset_transpose = proteomic_cancer_type_cptac.T
         print(f"Total number of entries in the dataset: {len(proteomic_dataset_transpose)}")
         # canonical isoform mapping 
         matrix_canonical_isoform = map_uniprot_isoforms(proteomic_dataset_transpose, mode=args.isoform_mode, use_version=args.version_id) 
-        # drop rows (proteins) with at least one NaN value across samples
-        proteomic_dataset_transpose_clean = matrix_canonical_isoform.dropna(axis =0, how = 'any')
+        
+        # Missing values handling
+        # by default remove all the rows that have missing values in more than 50 % of samples
+        na_dropped_matrix = drop_missing_values(matrix_canonical_isoform, args.missing_threshold)
+        # store the number of kept proteins that passed the first filter
+        n_after_overall_filter = len(na_dropped_matrix)
+        missing_exceed, obs_under_threshold = check_missing_values_per_group(na_dropped_matrix, args.missing_threshold, args.min_obs_per_group)
+        na_dropped_matrix = na_dropped_matrix[~obs_under_threshold]
 
-
+        if args.imputation_method == "knn":
+            imputed_matrix, missing_value_table = impute_knn(na_dropped_matrix, args.knn_neighbors)
+            missing_value_table.to_csv(os.path.join(output_dir, f"imputed_mask_{args.cancertype}_{args.source}.csv"))
+        else:
+            imputed_matrix = na_dropped_matrix
+        
         # report how many rows and genes were removed because of missing values
         n_rows_before = len(matrix_canonical_isoform)
-        n_rows_after = len(proteomic_dataset_transpose_clean)
-        n_genes_before = matrix_canonical_isoform.index.get_level_values(0).nunique()
-        n_genes_after = proteomic_dataset_transpose_clean.index.get_level_values(0).nunique()
-        print(f"Missing values filter: {n_rows_before - n_rows_after} rows "
-              f"({n_genes_before - n_genes_after} genes) removed because they have at least one missing value")
+        n_rows_after = len(imputed_matrix)
+        n_genes_after = imputed_matrix.index.get_level_values(0).nunique()
+        print(f"Missing values filter:")
+        print(f"- {n_rows_before - n_after_overall_filter} proteins removed: missing in more than {args.missing_threshold:.0%} of all samples")
+        print(f"  - {n_after_overall_filter - n_rows_after} proteins removed: fewer than "
+              f"{args.min_obs_per_group} observed values in the tumour or normal group")
         print(f"Final matrix: {n_rows_after} rows ({n_genes_after} genes)")
         
     except Exception as e:
         print(f'Error processing proteomic dataset: {e}')
         sys.exit(1)
     
-    output_dir = 'cptac_dataset_results'
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+
     
-    output_path_abmat = os.path.join(output_dir, f'abundance_matrix_{args.cancertype}_{args.source}.csv')
+    output_path_abmat = os.path.join(output_dir, f'abundance_matrix_{args.cancertype}_{args.source}_{args.imputation_method}.csv')
     # save abundance matrix
-    proteomic_dataset_transpose_clean.to_csv(output_path_abmat)
+    imputed_matrix.to_csv(output_path_abmat)
 
     # create and save sample groups labels dataframe
-    sample_groups_df = get_sample_group_labels_df(proteomic_dataset_transpose_clean)
+    sample_groups_df = get_sample_group_labels_df(imputed_matrix)
     output_path_samplab = os.path.join(output_dir, f'sample_labels_{args.cancertype}_{args.source}.csv')
     sample_groups_df.to_csv(output_path_samplab)
     
 
     if args.plot:
         # plot boxplots
-        plot_distribution_boxplot(proteomic_dataset_transpose_clean, args.cancertype, args.source, output_dir )
+        plot_distribution_boxplot(imputed_matrix, args.cancertype, args.source, args.imputation_method, output_dir )
         # plot density plots
-        plot_distribution_density(proteomic_dataset_transpose_clean, args.cancertype, args.source, output_dir)
+        plot_distribution_density(imputed_matrix, args.cancertype, args.source, args.imputation_method, output_dir)
         # plot PCA
-        plot_pca(proteomic_dataset_transpose_clean, args.cancertype, args.source, output_dir)
+        plot_pca(imputed_matrix, args.cancertype, args.source, args.imputation_method, output_dir)
 
 if __name__ == "__main__":
     try:

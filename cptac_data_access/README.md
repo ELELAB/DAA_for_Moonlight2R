@@ -49,8 +49,16 @@ For each gene in the input dataset, the ENSP ID linked to it are assessed based 
 
 *Note*: ENSP versions (ENSPXXXX.Y, where Y = version) are ignored by default. If option `-e` is used, the full ENSP ID must match in UniProt to be considered valid.
 
+## Missing value data handling 
+The script applies a filter on proteins with missing values across samples. Specifically, it drops all the rows where the proteins have missing value in more than 50% of the samples by default. The user can customize this fraction threshold by using the flag option `-m`. 
+The script prints the overall missingness percentage before and after this first filter. If the percentage of missing values is low (<15%) it is suggested to not impute missing value at all (https://doi.org/10.1002/pmic.202200092). For the DAA step of the pipeline, `limma` can handle missing values by only considering samples where the protein is actually measured.
+If an imputation of missing values is required, the user can choose to run `kNN` missing value imputation by using the flag option `-u`. The user can also customise the `k` by using the `-k` option. By default the script uses a `k=4` as used in this benchmarking study doi:10.1021/acs.jproteome.3c00205. The optional kNN imputation estimates each missing value from the most similar proteins in the same sample, so it assumes that missing values resemble the observed ones (Missing At Random). However, the suitability of this method depends on the acquisition method. In TMT data (e.g. CPTAC) missing values can be both caused by low-abundance proteins or because of plex-level missingness. We suggest to use kNN imputation method only if it is required to have full imputed datasets for downstream analysis. If overall missingness is low, we suggest to not impute for downstream analysis of CPTAC datasets.
 
-### Reproduce results
+The script checks whether proteins missing in more than 50% (default) of samples in at least one group condition, are concentrated in only one group condition: if a protein is observed in less than 3 samples (by default) in one group, it will be dropped. The user can adjust this minimum observation threshold by using the flag optio `-n`.
+Note1: a warning will be printed for proteins that have missing values in more than 50% (default) of the samples of at least one group, and a list of these proteins will be printed as well. 
+Note2: a warning will be printed to notify whether for a protein missingness is accumulated in one group condition only
+Note3: the script output an additional `.csv` reporting the missingness summary for each protein of the dataset. 
+## Reproduce results
 To reproduce the results follow these steps:
 1) Activate environment 
 ```bash 
@@ -59,7 +67,7 @@ conda activate ../DAA_py_env/
 ```
 2) Check the `cptac_cancer_info_table.csv` and choose one of the listed Cancer Type, its corresponding short name and the source pipeline name.
 
-3) Run the script `cptac_data_access.py` follwing this command line template:
+3) Run the script `cptac_data_access.py` following this command line template:
 
 ```bash 
 python cptac_data_access.py -c "cancer type short name" -s "pipeline source short name" 
@@ -78,10 +86,14 @@ The `cptac_data_access.py` script also performs Principal Component Analysis (PC
 - Density plot of the proteins abundance values of each samples across the entire dataset (protein_abundance_density_plots.png)
 - PCA plot where each sample is clustered on the group of belonging (e.g. Tumor, Normal) 
 
-### Working example
+## Working example
 To download and explore the Lung Squamous Cell Carcinoma  (LSCC) proteomics dataset processed by the University of Michigan (UMICH) pipeline and get quantitative proteomics data, you can run the following command:
 ```bash 
 python cptac_data_access.py -c lscc -s umich -i conservative -p
+```
+To run the same script with missing value data imputation, run the follwing:
+```bash 
+python cptac_data_access.py -c lscc -s umich -i conservative -p -u knn
 ```
 The output is stored in a folder named `cptac_dataset_results` containing:
 - downloaded cptac abundance matrix (`.csv`)
