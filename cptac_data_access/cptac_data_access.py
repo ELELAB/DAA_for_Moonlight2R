@@ -807,7 +807,7 @@ def check_missing_values_per_group(abundance_matrix, na_frac_th, min_obs_per_gro
               f"for these proteins: {difference.max():.1%}")
 
     if obs_under_threshold.any():
-        names = abundance_matrix.index[all_missing].get_level_values(0)[:10]
+        names = abundance_matrix.index[obs_under_threshold].get_level_values(0)[:10]
         print(f"{obs_under_threshold.sum()} proteins removed: fewer than {min_obs_per_group} in at least one group"
               f"Examples: {', '.join(map(str, names))}")
     
@@ -820,8 +820,6 @@ def impute_knn(filtered_abundance_matrix, k):
     similar proteins in the same sample.
     This strategy models missing values by assuming that 
     missing values look like the observed ones (MAR). 
-    The function tests different values of k on a validation 
-    set created by hiding known observed values. 
     """
     # ---- perform missing value imputation ---
     # save where the missing values are
@@ -907,7 +905,6 @@ def main():
         # report how many rows and genes were removed because of missing values
         n_rows_before = len(matrix_canonical_isoform)
         n_rows_after = len(imputed_matrix)
-        n_genes_before = matrix_canonical_isoform.index.get_level_values(0).nunique()
         n_genes_after = imputed_matrix.index.get_level_values(0).nunique()
         print(f"Missing values filter:")
         print(f"- {n_rows_before - n_after_overall_filter} proteins removed: missing in more than {args.missing_threshold:.0%} of all samples")
