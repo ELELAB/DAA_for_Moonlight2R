@@ -19,17 +19,14 @@ Differential Abundance analysis for proteomics data is crucial for accurate dete
 6. The output is a table containing for each protein in the dataset, a log2FC, average expression and p-values. 
 
 ## Reproduce results
-Before proceeding, check if `DAA_py_env` or any other virual environments are still active from the previous steps and deactivate it as follows:
+Before proceeding, check if `DAA_py_env` is set up and already active. If not, activate it as follows:
 ```bash 
-conda deactivate
-```
-Activate the conda environment 
-```bash 
-conda activate ../DAA_r_env/
+module load conda
+conda activate ../DAA_py_env
 ```
 Run the analysis 
 ```bash 
-Rscript limma.R -m "abundance_matrix.csv" -s "sample_labels.csv" -c "cancer type short name"
+python limma.py -m "abundance_matrix.csv" -s "sample_labels.csv" -c "cancer type short name"
 ```
 ## Input preparation
 If you have downloaded the data from the CPTAC Data Portal through the pyhton API and using the script [cptac_data_access.py](../cptac_data_access/cptac_data_access.py), you should be able to run the Differential Abundance Analysis using the files produced by the script. 
@@ -38,19 +35,20 @@ To make the script running on your own data instead, we suggest to have an input
 - The first column should be named `Name` and should contain the gene names. 
 - The shape of the matrix should be: nrows = # proteins and ncols = # samples.
 - If an additional column containing Ensembl Protein IDs for each gene name is available to you- the column should be named `Database_ID`.
+- If an additional column containing the UniProt AC for each gene name is available to you- the column should be name `UniProt_ID`.
 We also suggest that the input `sample_labels.csv` file should contain information as follows:
 - The first column should be named `Sample_ID` and should contain the sample IDs.
 - The second column should be named `Label_Group` and should contain the condition/group label assigned to each sample (e.g. Tumor or Normal)
 
 ## Working example 
-An example is provided here to run Differential Abundance Analysis (DAA) for Colon Adenocarcinoma (coad) proteomic dataset.
+An example is provided here to run Differential Abundance Analysis (DAA) for Lung Squamous Cell Carcinoma (LSCC) proteomic dataset.
 Note that to run the following command you need to specify the actual location of the input files. Here, we assume that the abundance matrix 
 and the sample label files are both stored in the default folder- created when running the [cptac_data_access.py](../cptac_data_access/cptac_data_access.py)
 
 ```bash 
-Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_lscc_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_lscc_umich.csv -c lscc
+python limma.py -i ../cptac_data_access/cptac_dataset_results/abundance_matrix_lscc_umich_none.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_lscc_umich.csv -d T-N -c lscc
 ```
 The script can also produce a Volcano plot for the differentially abundant proteins using an adjusted p-value threshold to visualize the most significant high or low abundance proteins colored in red and blue respectively and not significantly abundant proteins that falls below the p-value threshold in black. To produce the plot you can add the flag option `-p` and customise the adjusted p-value threshold using with the `-t` option as follows:
 ```bash 
-Rscript limma.R -m ../cptac_data_access/cptac_dataset_results/abundance_matrix_lscc_umich.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_lscc_umich.csv -c lscc -p -t 0.01
+python limma.py -i ../cptac_data_access/cptac_dataset_results/abundance_matrix_lscc_umich_none.csv -s ../cptac_data_access/cptac_dataset_results/sample_labels_lscc_umich.csv -d T-N -c lscc -p -t 0.01
 ```
